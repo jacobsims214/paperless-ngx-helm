@@ -169,7 +169,7 @@ persistence:
   ## Media volume - documents and thumbnails (largest volume)
   media:
     enabled: true
-    size: 50Gi
+    size: 100Gi
     storageClass: ""
     accessMode: ReadWriteOnce
   
