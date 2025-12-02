@@ -78,7 +78,7 @@ Add to your [Tailscale ACLs](https://login.tailscale.com/admin/acls):
 ```json
 {
   "tagOwners": {
-    "tag:paperless": ["autogroup:admin"]
+    "tag:paperless-ngx": ["autogroup:admin"]
   }
 }
 ```
@@ -117,7 +117,7 @@ helm install paperless ./charts/paperless-ngx -n paperless-ngx
 | `tailscale.enabled` | Enable Tailscale | `true` |
 | `tailscale.hostname` | Tailscale machine name | `paperless` |
 | `tailscale.domain` | Tailscale domain | `tail108d23.ts.net` |
-| `tailscale.tags` | ACL tags | `tag:paperless` |
+| `tailscale.tags` | ACL tags | `tag:paperless-ngx` |
 | `tailscale.funnel` | Enable public Funnel | `false` |
 
 ### Application
