@@ -1,0 +1,17 @@
+apiVersion: v2
+name: paperless-ngx
+description: A Helm chart for Paperless-NGX - Document Management System
+type: application
+version: 0.1.0
+appVersion: "2.14.7"
+home: https://docs.paperless-ngx.com/
+sources:
+  - https://github.com/paperless-ngx/paperless-ngx
+keywords:
+  - paperless
+  - document-management
+  - ocr
+  - pdf
+maintainers:
+  - name: simstech
+

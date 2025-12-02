@@ -1,0 +1,278 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "paperless-ngx.fullname" . }}
+  labels:
+    {{- include "paperless-ngx.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "paperless-ngx.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "paperless-ngx.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "paperless-ngx.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          env:
+            # ============================================================
+            # Required: Redis
+            # ============================================================
+            - name: PAPERLESS_REDIS
+              value: {{ .Values.redis.url | quote }}
+            {{- if .Values.redis.prefix }}
+            - name: PAPERLESS_REDIS_PREFIX
+              value: {{ .Values.redis.prefix | quote }}
+            {{- end }}
+            
+            # ============================================================
+            # Required: PostgreSQL
+            # ============================================================
+            {{- if .Values.postgresql.enabled }}
+            - name: PAPERLESS_DBHOST
+              value: {{ .Values.postgresql.host | quote }}
+            - name: PAPERLESS_DBPORT
+              value: {{ .Values.postgresql.port | quote }}
+            - name: PAPERLESS_DBNAME
+              value: {{ .Values.postgresql.database | quote }}
+            - name: PAPERLESS_DBSSLMODE
+              value: {{ .Values.postgresql.sslmode | quote }}
+            {{- if .Values.postgresql.poolSize }}
+            - name: PAPERLESS_DB_POOLSIZE
+              value: {{ .Values.postgresql.poolSize | quote }}
+            {{- end }}
+            - name: PAPERLESS_DBUSER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgresql.existingSecret.name | quote }}
+                  key: {{ .Values.postgresql.existingSecret.usernameKey | quote }}
+            - name: PAPERLESS_DBPASS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgresql.existingSecret.name | quote }}
+                  key: {{ .Values.postgresql.existingSecret.passwordKey | quote }}
+            {{- end }}
+            
+            # ============================================================
+            # Application Configuration
+            # ============================================================
+            - name: PAPERLESS_URL
+              value: {{ .Values.paperless.url | quote }}
+            - name: PAPERLESS_TIME_ZONE
+              value: {{ .Values.paperless.timezone | quote }}
+            
+            # Secret Key
+            {{- if .Values.paperless.secretKey.existingSecret }}
+            - name: PAPERLESS_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.paperless.secretKey.existingSecret | quote }}
+                  key: {{ .Values.paperless.secretKey.existingSecretKey | quote }}
+            {{- else if .Values.paperless.secretKey.value }}
+            - name: PAPERLESS_SECRET_KEY
+              value: {{ .Values.paperless.secretKey.value | quote }}
+            {{- end }}
+            
+            # Admin User
+            {{- if .Values.paperless.admin.enabled }}
+            - name: PAPERLESS_ADMIN_USER
+              value: {{ .Values.paperless.admin.username | quote }}
+            - name: PAPERLESS_ADMIN_MAIL
+              value: {{ .Values.paperless.admin.email | quote }}
+            - name: PAPERLESS_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.paperless.admin.existingSecret | quote }}
+                  key: {{ .Values.paperless.admin.existingSecretKey | quote }}
+            {{- end }}
+            
+            # ============================================================
+            # OCR Configuration
+            # ============================================================
+            - name: PAPERLESS_OCR_LANGUAGE
+              value: {{ .Values.paperless.ocr.language | quote }}
+            - name: PAPERLESS_OCR_MODE
+              value: {{ .Values.paperless.ocr.mode | quote }}
+            - name: PAPERLESS_OCR_OUTPUT_TYPE
+              value: {{ .Values.paperless.ocr.outputType | quote }}
+            
+            # ============================================================
+            # Consumer Configuration
+            # ============================================================
+            - name: PAPERLESS_CONSUMER_RECURSIVE
+              value: {{ .Values.paperless.consumer.recursive | quote }}
+            - name: PAPERLESS_CONSUMER_SUBDIRS_AS_TAGS
+              value: {{ .Values.paperless.consumer.subdirsAsTags | quote }}
+            - name: PAPERLESS_CONSUMER_DELETE_DUPLICATES
+              value: {{ .Values.paperless.consumer.deleteDuplicates | quote }}
+            {{- if gt (int .Values.paperless.consumer.polling) 0 }}
+            - name: PAPERLESS_CONSUMER_POLLING
+              value: {{ .Values.paperless.consumer.polling | quote }}
+            {{- end }}
+            
+            # ============================================================
+            # Performance
+            # ============================================================
+            - name: PAPERLESS_TASK_WORKERS
+              value: {{ .Values.paperless.taskWorkers | quote }}
+            - name: PAPERLESS_THREADS_PER_WORKER
+              value: {{ .Values.paperless.threadsPerWorker | quote }}
+            - name: PAPERLESS_WEBSERVER_WORKERS
+              value: {{ .Values.paperless.webserverWorkers | quote }}
+            - name: PAPERLESS_DATE_ORDER
+              value: {{ .Values.paperless.dateOrder | quote }}
+            
+            # ============================================================
+            # Optional: Tika + Gotenberg
+            # ============================================================
+            {{- if and .Values.tika.enabled .Values.gotenberg.enabled }}
+            - name: PAPERLESS_TIKA_ENABLED
+              value: "true"
+            - name: PAPERLESS_TIKA_ENDPOINT
+              value: {{ .Values.tika.endpoint | quote }}
+            - name: PAPERLESS_TIKA_GOTENBERG_ENDPOINT
+              value: {{ .Values.gotenberg.endpoint | quote }}
+            {{- end }}
+            
+            # ============================================================
+            # User/Group IDs
+            # ============================================================
+            - name: USERMAP_UID
+              value: "1000"
+            - name: USERMAP_GID
+              value: "1000"
+          
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          
+          volumeMounts:
+            {{- if .Values.persistence.data.enabled }}
+            - name: data
+              mountPath: /usr/src/paperless/data
+            {{- end }}
+            {{- if .Values.persistence.media.enabled }}
+            - name: media
+              mountPath: /usr/src/paperless/media
+            {{- end }}
+            {{- if .Values.persistence.consume.enabled }}
+            - name: consume
+              mountPath: /usr/src/paperless/consume
+            {{- end }}
+            {{- if .Values.persistence.export.enabled }}
+            - name: export
+              mountPath: /usr/src/paperless/export
+            {{- end }}
+        
+        {{- if .Values.tailscale.enabled }}
+        # ============================================================
+        # Tailscale Sidecar
+        # ============================================================
+        - name: tailscale
+          image: "{{ .Values.tailscale.image }}"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: TS_AUTHKEY
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ .Values.tailscale.authSecretName }}"
+                  key: TS_AUTHKEY
+            - name: TS_STATE_DIR
+              value: "/var/lib/tailscale"
+            - name: TS_SERVE_CONFIG
+              value: "/config/serve.json"
+            - name: TS_USERSPACE
+              value: "true"
+            - name: TS_HOSTNAME
+              value: "{{ .Values.tailscale.hostname }}"
+            - name: TS_EXTRA_ARGS
+              value: "--advertise-tags={{ .Values.tailscale.tags }}"
+          volumeMounts:
+            - name: tailscale-state
+              mountPath: /var/lib/tailscale
+            - name: tailscale-config
+              mountPath: /config
+        {{- end }}
+      
+      volumes:
+        {{- if .Values.persistence.data.enabled }}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "paperless-ngx.fullname" . }}-data
+        {{- end }}
+        {{- if .Values.persistence.media.enabled }}
+        - name: media
+          persistentVolumeClaim:
+            claimName: {{ include "paperless-ngx.fullname" . }}-media
+        {{- end }}
+        {{- if .Values.persistence.consume.enabled }}
+        - name: consume
+          persistentVolumeClaim:
+            claimName: {{ include "paperless-ngx.fullname" . }}-consume
+        {{- end }}
+        {{- if .Values.persistence.export.enabled }}
+        - name: export
+          persistentVolumeClaim:
+            claimName: {{ include "paperless-ngx.fullname" . }}-export
+        {{- end }}
+        {{- if .Values.tailscale.enabled }}
+        - name: tailscale-state
+          persistentVolumeClaim:
+            claimName: tailscale-state
+        - name: tailscale-config
+          configMap:
+            name: tailscale-serve-config
+        {{- end }}
+      
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+

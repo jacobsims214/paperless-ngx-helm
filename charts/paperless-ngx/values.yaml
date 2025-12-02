@@ -1,0 +1,275 @@
+# Paperless-NGX Helm Chart Values
+# https://docs.paperless-ngx.com/configuration/
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/paperless-ngx/paperless-ngx
+  pullPolicy: IfNotPresent
+  tag: "2.14.7"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+## Service Account
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+## Pod configuration
+podAnnotations: {}
+podSecurityContext:
+  fsGroup: 1000
+
+securityContext: {}
+
+## Service configuration
+service:
+  type: ClusterIP
+  port: 8000
+
+## Tailscale Configuration (Tailnet-only, NO Funnel)
+## Exposes Paperless-NGX only to devices on the Tailscale network
+## This is NOT publicly accessible - users must be on the tailnet
+tailscale:
+  enabled: true
+  image: tailscale/tailscale:v1.76.1
+  hostname: "paperless"
+  domain: "tail108d23.ts.net"
+  tags: "tag:paperless"
+  authSecretName: "tailscale-auth-paperless"
+  proxyPort: 8000
+  stateSize: "100Mi"
+  ## Funnel disabled - tailnet access only
+  funnel: false
+
+## ============================================================================
+## REQUIRED: External Services
+## ============================================================================
+
+## PostgreSQL Configuration (via CloudNative-PG operator)
+## The operator creates a secret with connection details
+postgresql:
+  ## Use external PostgreSQL (recommended)
+  enabled: true
+  ## Hostname of PostgreSQL service (same namespace)
+  host: "paperlessngx-db-cluster-rw.paperless-ngx.svc.cluster.local"
+  port: 5432
+  database: "app"
+  ## Use existing secret for credentials (same keys as vaultwarden)
+  existingSecret:
+    name: "paperlessngx-db-cluster-app"
+    usernameKey: "username"
+    passwordKey: "password"
+  ## SSL mode: disable, allow, prefer, require, verify-ca, verify-full
+  sslmode: "prefer"
+  ## Connection pool size (optional, improves performance)
+  poolSize: 4
+
+## Valkey Configuration (in valkey namespace, no auth required)
+redis:
+  ## Valkey URL for Celery task queue
+  ## No authentication required
+  url: "redis://valkey.valkey.svc.cluster.local:6379"
+  ## Optional prefix for Redis keys (useful if sharing Redis instance)
+  prefix: ""
+
+## ============================================================================
+## Application Configuration
+## ============================================================================
+
+## URL where Paperless will be accessible (required for CSRF)
+## Tailnet-only URL (no Funnel)
+paperless:
+  url: "https://paperless.tail108d23.ts.net"
+  
+  ## Secret key for session tokens (CRITICAL for security)
+  ## If not provided, will be auto-generated
+  ## Use existingSecret for production
+  secretKey:
+    value: ""
+    existingSecret: "paperless-secrets"
+    existingSecretKey: "PAPERLESS_SECRET_KEY"
+  
+  ## Admin user auto-creation (for Kubernetes deployments)
+  admin:
+    enabled: true
+    username: "admin"
+    email: "admin@simstech.cloud"
+    ## Password from secret
+    existingSecret: "paperless-secrets"
+    existingSecretKey: "PAPERLESS_ADMIN_PASSWORD"
+  
+  ## Timezone
+  timezone: "America/New_York"
+  
+  ## OCR Configuration
+  ocr:
+    ## Primary OCR language (3-letter code)
+    ## Common: eng, deu, fra, spa, ita
+    language: "eng"
+    ## OCR mode: skip, redo, force
+    mode: "skip"
+    ## Output type: pdf, pdfa, pdfa-1, pdfa-2, pdfa-3
+    outputType: "pdfa"
+  
+  ## Consumer (document ingestion) settings
+  consumer:
+    ## Watch subdirectories in consume folder
+    recursive: true
+    ## Use subdirectory names as tags
+    subdirsAsTags: true
+    ## Delete duplicate documents
+    deleteDuplicates: false
+    ## Polling interval (0 = use inotify)
+    polling: 0
+  
+  ## Task workers (Celery)
+  taskWorkers: 2
+  threadsPerWorker: 2
+  
+  ## Web server workers
+  webserverWorkers: 2
+  
+  ## Date parsing order: DMY, MDY, YMD
+  dateOrder: "MDY"
+
+## ============================================================================
+## Optional: Tika + Gotenberg for Office Documents
+## ============================================================================
+
+tika:
+  enabled: false
+  ## Deploy Tika as part of this chart
+  deploy: false
+  ## Or use external Tika endpoint
+  endpoint: "http://tika.paperless.svc.cluster.local:9998"
+
+gotenberg:
+  enabled: false
+  ## Deploy Gotenberg as part of this chart
+  deploy: false
+  ## Or use external Gotenberg endpoint
+  endpoint: "http://gotenberg.paperless.svc.cluster.local:3000"
+
+## ============================================================================
+## Storage Configuration
+## ============================================================================
+
+persistence:
+  ## Data volume - index, classification model, logs
+  data:
+    enabled: true
+    size: 5Gi
+    storageClass: ""
+    accessMode: ReadWriteOnce
+  
+  ## Media volume - documents and thumbnails (largest volume)
+  media:
+    enabled: true
+    size: 50Gi
+    storageClass: ""
+    accessMode: ReadWriteOnce
+  
+  ## Consume volume - document intake folder
+  consume:
+    enabled: true
+    size: 5Gi
+    storageClass: ""
+    accessMode: ReadWriteOnce
+  
+  ## Export volume - for document exports
+  export:
+    enabled: true
+    size: 10Gi
+    storageClass: ""
+    accessMode: ReadWriteOnce
+
+## ============================================================================
+## Resources
+## ============================================================================
+
+resources:
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+  requests:
+    cpu: 500m
+    memory: 512Mi
+
+## ============================================================================
+## Scheduling
+## ============================================================================
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+## ============================================================================
+## Extra Objects (Tailscale ConfigMap, PVC, RBAC)
+## ============================================================================
+
+extraObjects:
+  # Tailscale serve configuration (NO Funnel - tailnet only)
+  - apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: tailscale-serve-config
+      namespace: "{{ .Release.Namespace }}"
+    data:
+      serve.json: |
+        {
+          "TCP": {
+            "443": {
+              "HTTPS": true
+            }
+          },
+          "Web": {
+            "{{ .Values.tailscale.hostname }}.{{ .Values.tailscale.domain }}:443": {
+              "Handlers": {
+                "/": {
+                  "Proxy": "http://127.0.0.1:{{ .Values.tailscale.proxyPort }}"
+                }
+              }
+            }
+          }
+        }
+  # Tailscale state persistence
+  - apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: tailscale-state
+      namespace: "{{ .Release.Namespace }}"
+    spec:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: "{{ .Values.tailscale.stateSize }}"
+  # Tailscale RBAC - Role
+  - apiVersion: rbac.authorization.k8s.io/v1
+    kind: Role
+    metadata:
+      name: tailscale
+      namespace: "{{ .Release.Namespace }}"
+    rules:
+      - apiGroups: [""]
+        resources: ["secrets"]
+        verbs: ["create", "get", "update", "patch", "delete"]
+  # Tailscale RBAC - RoleBinding
+  - apiVersion: rbac.authorization.k8s.io/v1
+    kind: RoleBinding
+    metadata:
+      name: tailscale
+      namespace: "{{ .Release.Namespace }}"
+    subjects:
+      - kind: ServiceAccount
+        name: '{{ include "paperless-ngx.serviceAccountName" . }}'
+        namespace: "{{ .Release.Namespace }}"
+    roleRef:
+      kind: Role
+      name: tailscale
+      apiGroup: rbac.authorization.k8s.io
+
