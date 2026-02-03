@@ -229,13 +229,16 @@ extraObjects:
       dnsNames:
         - paperless.simstech.local
 
-  # Paperless Secrets (will be populated manually or from vault)
+  # Paperless Secrets - static values for ArgoCD sync stability
+  # Note: Change PAPERLESS_SECRET_KEY if compromised
   - apiVersion: v1
     kind: Secret
     metadata:
       name: paperless-secrets
       namespace: "{{ .Release.Namespace }}"
+      annotations:
+        argocd.argoproj.io/sync-options: "Replace=true"
     type: Opaque
     stringData:
-      PAPERLESS_SECRET_KEY: "{{ randAlphaNum 64 }}"
+      PAPERLESS_SECRET_KEY: "K8sP4perlessNGXSecretKey2026SimstechHomelab1234567890abcd"
       PAPERLESS_ADMIN_PASSWORD: "Th3B0mb1!"
