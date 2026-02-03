@@ -45,7 +45,7 @@ tailscale:
   enabled: true
   image: tailscale/tailscale:v1.76.1
   hostname: "paperless"
-  domain: "tail108d23.ts.net"
+  domain: "your-tailnet.ts.net"  # Replace with your tailnet domain
   tags: "tag:paperless-ngx"
   authSecretName: "tailscale-auth-paperless"
   proxyPort: 8000
@@ -91,7 +91,7 @@ redis:
 ## URL where Paperless will be accessible (required for CSRF)
 ## Tailnet-only URL (no Funnel)
 paperless:
-  url: "https://paperless.tail108d23.ts.net"
+  url: "https://paperless.your-tailnet.ts.net"  # Replace with your URL
   
   ## Secret key for session tokens (CRITICAL for security)
   ## If not provided, will be auto-generated

@@ -229,16 +229,18 @@ extraObjects:
       dnsNames:
         - paperless.simstech.local
 
-  # Paperless Secrets - static values for ArgoCD sync stability
-  # Note: Change PAPERLESS_SECRET_KEY if compromised
-  - apiVersion: v1
-    kind: Secret
-    metadata:
-      name: paperless-secrets
-      namespace: "{{ .Release.Namespace }}"
-      annotations:
-        argocd.argoproj.io/sync-options: "Replace=true"
-    type: Opaque
-    stringData:
-      PAPERLESS_SECRET_KEY: "K8sP4perlessNGXSecretKey2026SimstechHomelab1234567890abcd"
-      PAPERLESS_ADMIN_PASSWORD: "Th3B0mb1!"
+  # Paperless Secrets - CREATE THIS SECRET MANUALLY before deploying
+  # kubectl create secret generic paperless-secrets -n paperless-ngx \
+  #   --from-literal=PAPERLESS_SECRET_KEY="$(openssl rand -hex 32)" \
+  #   --from-literal=PAPERLESS_ADMIN_PASSWORD="your-secure-password"
+  #
+  # Or uncomment below with your own values (not recommended for public repos)
+  # - apiVersion: v1
+  #   kind: Secret
+  #   metadata:
+  #     name: paperless-secrets
+  #     namespace: "{{ .Release.Namespace }}"
+  #   type: Opaque
+  #   stringData:
+  #     PAPERLESS_SECRET_KEY: "CHANGE_ME_GENERATE_RANDOM_64_CHAR_STRING"
+  #     PAPERLESS_ADMIN_PASSWORD: "CHANGE_ME_SECURE_PASSWORD"
