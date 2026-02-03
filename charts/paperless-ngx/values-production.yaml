@@ -1,0 +1,241 @@
+# Paperless-NGX Production Values
+# Uses Cilium Ingress with HTTPS for local network access
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/paperless-ngx/paperless-ngx
+  pullPolicy: IfNotPresent
+  tag: "2.14.7"
+
+# =============================================================================
+# Ingress Configuration (Cilium with HTTPS)
+# =============================================================================
+ingress:
+  enabled: true
+  className: cilium
+  annotations: {}
+  hosts:
+    - host: paperless.simstech.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: paperless-tls
+      hosts:
+        - paperless.simstech.local
+
+# Disable Tailscale - using Cilium Ingress instead
+tailscale:
+  enabled: false
+
+# =============================================================================
+# PostgreSQL Configuration (CloudNative-PG)
+# =============================================================================
+postgresql:
+  enabled: true
+  host: "paperless-db-rw.paperless-ngx.svc.cluster.local"
+  port: 5432
+  database: "app"
+  existingSecret:
+    name: "paperless-db-app"
+    usernameKey: "username"
+    passwordKey: "password"
+  sslmode: "prefer"
+  poolSize: 4
+
+# =============================================================================
+# Redis/Valkey Configuration
+# =============================================================================
+redis:
+  # Use Valkey in the same namespace
+  url: "redis://paperless-valkey:6379"
+  prefix: ""
+
+# =============================================================================
+# Application Configuration
+# =============================================================================
+paperless:
+  url: "https://paperless.simstech.local"
+  
+  secretKey:
+    value: ""
+    existingSecret: "paperless-secrets"
+    existingSecretKey: "PAPERLESS_SECRET_KEY"
+  
+  admin:
+    enabled: true
+    username: "admin"
+    email: "admin@simstech.cloud"
+    existingSecret: "paperless-secrets"
+    existingSecretKey: "PAPERLESS_ADMIN_PASSWORD"
+  
+  timezone: "America/New_York"
+  
+  ocr:
+    language: "eng"
+    mode: "skip"
+    outputType: "pdfa"
+  
+  consumer:
+    recursive: true
+    subdirsAsTags: true
+    deleteDuplicates: false
+    polling: 0
+  
+  taskWorkers: 2
+  threadsPerWorker: 2
+  webserverWorkers: 2
+  dateOrder: "MDY"
+
+# =============================================================================
+# Storage Configuration - NFS
+# =============================================================================
+persistence:
+  data:
+    enabled: true
+    size: 5Gi
+    storageClass: "nfs-storage"
+    accessMode: ReadWriteOnce
+  
+  media:
+    enabled: true
+    size: 100Gi
+    storageClass: "nfs-storage"
+    accessMode: ReadWriteOnce
+  
+  consume:
+    enabled: true
+    size: 5Gi
+    storageClass: "nfs-storage"
+    accessMode: ReadWriteOnce
+  
+  export:
+    enabled: true
+    size: 10Gi
+    storageClass: "nfs-storage"
+    accessMode: ReadWriteOnce
+
+# =============================================================================
+# Resources
+# =============================================================================
+resources:
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+  requests:
+    cpu: 500m
+    memory: 512Mi
+
+# =============================================================================
+# Extra Objects - CloudNativePG Cluster, Valkey, Cert, Secrets
+# =============================================================================
+extraObjects:
+  # CloudNativePG PostgreSQL Cluster
+  - apiVersion: postgresql.cnpg.io/v1
+    kind: Cluster
+    metadata:
+      name: paperless-db
+      namespace: "{{ .Release.Namespace }}"
+    spec:
+      instances: 1
+      imageName: ghcr.io/cloudnative-pg/postgresql:17
+      storage:
+        size: 20Gi
+        storageClass: nfs-storage
+      resources:
+        requests:
+          cpu: 250m
+          memory: 512Mi
+        limits:
+          cpu: "1"
+          memory: 2Gi
+      postgresql:
+        parameters:
+          max_connections: "100"
+          shared_buffers: "128MB"
+      bootstrap:
+        initdb:
+          database: app
+          owner: app
+
+  # Valkey (Redis-compatible) StatefulSet
+  - apiVersion: apps/v1
+    kind: StatefulSet
+    metadata:
+      name: paperless-valkey
+      namespace: "{{ .Release.Namespace }}"
+    spec:
+      serviceName: paperless-valkey
+      replicas: 1
+      selector:
+        matchLabels:
+          app: paperless-valkey
+      template:
+        metadata:
+          labels:
+            app: paperless-valkey
+        spec:
+          containers:
+            - name: valkey
+              image: valkey/valkey:8.0-alpine
+              ports:
+                - containerPort: 6379
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+                limits:
+                  cpu: 200m
+                  memory: 256Mi
+              volumeMounts:
+                - name: data
+                  mountPath: /data
+      volumeClaimTemplates:
+        - metadata:
+            name: data
+          spec:
+            accessModes: ["ReadWriteOnce"]
+            storageClassName: nfs-storage
+            resources:
+              requests:
+                storage: 1Gi
+
+  # Valkey Service
+  - apiVersion: v1
+    kind: Service
+    metadata:
+      name: paperless-valkey
+      namespace: "{{ .Release.Namespace }}"
+    spec:
+      selector:
+        app: paperless-valkey
+      ports:
+        - port: 6379
+          targetPort: 6379
+
+  # Self-signed TLS Certificate
+  - apiVersion: cert-manager.io/v1
+    kind: Certificate
+    metadata:
+      name: paperless-tls
+      namespace: "{{ .Release.Namespace }}"
+    spec:
+      secretName: paperless-tls
+      issuerRef:
+        name: selfsigned-issuer
+        kind: ClusterIssuer
+      commonName: paperless.simstech.local
+      dnsNames:
+        - paperless.simstech.local
+
+  # Paperless Secrets (will be populated manually or from vault)
+  - apiVersion: v1
+    kind: Secret
+    metadata:
+      name: paperless-secrets
+      namespace: "{{ .Release.Namespace }}"
+    type: Opaque
+    stringData:
+      PAPERLESS_SECRET_KEY: "{{ randAlphaNum 64 }}"
+      PAPERLESS_ADMIN_PASSWORD: "Th3B0mb1!"

@@ -30,6 +30,14 @@ service:
   type: ClusterIP
   port: 8000
 
+## Ingress Configuration (Cilium)
+ingress:
+  enabled: false
+  className: cilium
+  annotations: {}
+  hosts: []
+  tls: []
+
 ## Tailscale Configuration (Tailnet-only, NO Funnel)
 ## Exposes Paperless-NGX only to devices on the Tailscale network
 ## This is NOT publicly accessible - users must be on the tailnet
@@ -211,65 +219,9 @@ affinity: {}
 ## Extra Objects (Tailscale ConfigMap, PVC, RBAC)
 ## ============================================================================
 
-extraObjects:
-  # Tailscale serve configuration (NO Funnel - tailnet only)
-  - apiVersion: v1
-    kind: ConfigMap
-    metadata:
-      name: tailscale-serve-config
-      namespace: "{{ .Release.Namespace }}"
-    data:
-      serve.json: |
-        {
-          "TCP": {
-            "443": {
-              "HTTPS": true
-            }
-          },
-          "Web": {
-            "{{ .Values.tailscale.hostname }}.{{ .Values.tailscale.domain }}:443": {
-              "Handlers": {
-                "/": {
-                  "Proxy": "http://127.0.0.1:{{ .Values.tailscale.proxyPort }}"
-                }
-              }
-            }
-          }
-        }
-  # Tailscale state persistence
-  - apiVersion: v1
-    kind: PersistentVolumeClaim
-    metadata:
-      name: tailscale-state
-      namespace: "{{ .Release.Namespace }}"
-    spec:
-      accessModes:
-        - ReadWriteOnce
-      resources:
-        requests:
-          storage: "{{ .Values.tailscale.stateSize }}"
-  # Tailscale RBAC - Role
-  - apiVersion: rbac.authorization.k8s.io/v1
-    kind: Role
-    metadata:
-      name: tailscale
-      namespace: "{{ .Release.Namespace }}"
-    rules:
-      - apiGroups: [""]
-        resources: ["secrets"]
-        verbs: ["create", "get", "update", "patch", "delete"]
-  # Tailscale RBAC - RoleBinding
-  - apiVersion: rbac.authorization.k8s.io/v1
-    kind: RoleBinding
-    metadata:
-      name: tailscale
-      namespace: "{{ .Release.Namespace }}"
-    subjects:
-      - kind: ServiceAccount
-        name: '{{ include "paperless-ngx.serviceAccountName" . }}'
-        namespace: "{{ .Release.Namespace }}"
-    roleRef:
-      kind: Role
-      name: tailscale
-      apiGroup: rbac.authorization.k8s.io
+extraObjects: []
+  # When tailscale.enabled is true, add these objects in your values override:
+  # - Tailscale serve configuration ConfigMap
+  # - Tailscale state PVC
+  # - Tailscale RBAC Role and RoleBinding
 
