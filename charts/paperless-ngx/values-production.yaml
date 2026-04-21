@@ -214,7 +214,7 @@ extraObjects:
         - port: 6379
           targetPort: 6379
 
-  # Self-signed TLS Certificate
+  # TLS Certificate signed by simstech internal CA
   - apiVersion: cert-manager.io/v1
     kind: Certificate
     metadata:
@@ -223,7 +223,7 @@ extraObjects:
     spec:
       secretName: paperless-tls
       issuerRef:
-        name: selfsigned-issuer
+        name: simstech-ca-issuer
         kind: ClusterIssuer
       commonName: paperless.simstech.local
       dnsNames:
