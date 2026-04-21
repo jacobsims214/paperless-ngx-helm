@@ -1,5 +1,5 @@
 # Paperless-NGX Production Values
-# Uses Cilium Ingress with HTTPS for local network access
+# Uses Cilium Ingress with HTTP - TLS terminated by upstream reverse proxy
 
 replicaCount: 1
 
@@ -9,7 +9,7 @@ image:
   tag: "2.14.7"
 
 # =============================================================================
-# Ingress Configuration (Cilium with HTTPS)
+# Ingress Configuration (Cilium - HTTP only, TLS terminated by reverse proxy)
 # =============================================================================
 ingress:
   enabled: true
@@ -20,10 +20,7 @@ ingress:
       paths:
         - path: /
           pathType: Prefix
-  tls:
-    - secretName: paperless-tls
-      hosts:
-        - paperless.simstech.local
+  tls: []
 
 # Disable Tailscale - using Cilium Ingress instead
 tailscale:
@@ -56,33 +53,33 @@ redis:
 # Application Configuration
 # =============================================================================
 paperless:
-  url: "https://paperless.simstech.local"
-  
+  url: "http://paperless.simstech.local"
+
   secretKey:
     value: ""
     existingSecret: "paperless-secrets"
     existingSecretKey: "PAPERLESS_SECRET_KEY"
-  
+
   admin:
     enabled: true
     username: "admin"
     email: "admin@simstech.cloud"
     existingSecret: "paperless-secrets"
     existingSecretKey: "PAPERLESS_ADMIN_PASSWORD"
-  
+
   timezone: "America/New_York"
-  
+
   ocr:
     language: "eng"
     mode: "skip"
     outputType: "pdfa"
-  
+
   consumer:
     recursive: true
     subdirsAsTags: true
     deleteDuplicates: false
     polling: 0
-  
+
   taskWorkers: 2
   threadsPerWorker: 2
   webserverWorkers: 2
@@ -213,21 +210,6 @@ extraObjects:
       ports:
         - port: 6379
           targetPort: 6379
-
-  # TLS Certificate signed by simstech internal CA
-  - apiVersion: cert-manager.io/v1
-    kind: Certificate
-    metadata:
-      name: paperless-tls
-      namespace: "{{ .Release.Namespace }}"
-    spec:
-      secretName: paperless-tls
-      issuerRef:
-        name: simstech-ca-issuer
-        kind: ClusterIssuer
-      commonName: paperless.simstech.local
-      dnsNames:
-        - paperless.simstech.local
 
   # Paperless Secrets
   # IMPORTANT: Override these values via ArgoCD parameters or create secret manually
