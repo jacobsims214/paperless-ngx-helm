@@ -1,5 +1,5 @@
 # Paperless-NGX Production Values
-# Uses Cilium Ingress with HTTP - TLS terminated by upstream reverse proxy
+# Uses Cilium Ingress with HTTPS (simstech internal CA)
 
 replicaCount: 1
 
@@ -9,7 +9,7 @@ image:
   tag: "2.14.7"
 
 # =============================================================================
-# Ingress Configuration (Cilium - HTTP only, TLS terminated by reverse proxy)
+# Ingress Configuration (Cilium with HTTPS)
 # =============================================================================
 ingress:
   enabled: true
@@ -20,7 +20,10 @@ ingress:
       paths:
         - path: /
           pathType: Prefix
-  tls: []
+  tls:
+    - secretName: paperless-tls
+      hosts:
+        - paperless.simstech.local
 
 # Disable Tailscale - using Cilium Ingress instead
 tailscale:
@@ -53,7 +56,7 @@ redis:
 # Application Configuration
 # =============================================================================
 paperless:
-  url: "http://paperless.simstech.local"
+  url: "https://paperless.simstech.local"
 
   secretKey:
     value: ""
@@ -210,6 +213,21 @@ extraObjects:
       ports:
         - port: 6379
           targetPort: 6379
+
+  # TLS Certificate signed by simstech internal CA
+  - apiVersion: cert-manager.io/v1
+    kind: Certificate
+    metadata:
+      name: paperless-tls
+      namespace: "{{ .Release.Namespace }}"
+    spec:
+      secretName: paperless-tls
+      issuerRef:
+        name: simstech-ca-issuer
+        kind: ClusterIssuer
+      commonName: paperless.simstech.local
+      dnsNames:
+        - paperless.simstech.local
 
   # Paperless Secrets
   # IMPORTANT: Override these values via ArgoCD parameters or create secret manually
