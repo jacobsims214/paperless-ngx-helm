@@ -1,5 +1,5 @@
 # Paperless-NGX Production Values
-# Uses Cilium Ingress with HTTPS (simstech internal CA)
+# Uses Traefik Ingress with wildcard Let's Encrypt cert (simstech-wildcard-tls)
 
 replicaCount: 1
 
@@ -9,11 +9,11 @@ image:
   tag: "2.14.7"
 
 # =============================================================================
-# Ingress Configuration (Cilium with HTTPS)
+# Ingress Configuration (Traefik with wildcard TLS)
 # =============================================================================
 ingress:
   enabled: true
-  className: cilium
+  className: traefik
   annotations: {}
   hosts:
     - host: paperless.simstech.cloud
@@ -21,11 +21,11 @@ ingress:
         - path: /
           pathType: Prefix
   tls:
-    - secretName: paperless-tls
+    - secretName: simstech-wildcard-tls
       hosts:
         - paperless.simstech.cloud
 
-# Disable Tailscale - using Cilium Ingress instead
+# Disable Tailscale - using Traefik Ingress instead
 tailscale:
   enabled: false
 
@@ -128,7 +128,7 @@ resources:
     memory: 512Mi
 
 # =============================================================================
-# Extra Objects - CloudNativePG Cluster, Valkey, Cert, Secrets
+# Extra Objects - CloudNativePG Cluster, Valkey, Secrets
 # =============================================================================
 extraObjects:
   # CloudNativePG PostgreSQL Cluster
@@ -213,21 +213,6 @@ extraObjects:
       ports:
         - port: 6379
           targetPort: 6379
-
-  # TLS Certificate signed by simstech internal CA
-  - apiVersion: cert-manager.io/v1
-    kind: Certificate
-    metadata:
-      name: paperless-tls
-      namespace: "{{ .Release.Namespace }}"
-    spec:
-      secretName: paperless-tls
-      issuerRef:
-        name: simstech-ca-issuer
-        kind: ClusterIssuer
-      commonName: paperless.simstech.cloud
-      dnsNames:
-        - paperless.simstech.cloud
 
   # Paperless Secrets
   # IMPORTANT: Override these values via ArgoCD parameters or create secret manually
