@@ -9,21 +9,10 @@ image:
   tag: "2.14.7"
 
 # =============================================================================
-# Ingress Configuration (Traefik with wildcard TLS)
-# =============================================================================
+# Ingress Configuration (disabled — managed centrally by traefik IngressRoute CRD)
 ingress:
-  enabled: true
-  className: traefik
-  annotations: {}
-  hosts:
-    - host: paperless.simstech.cloud
-      paths:
-        - path: /
-          pathType: Prefix
-  tls:
-    - secretName: simstech-wildcard-tls
-      hosts:
-        - paperless.simstech.cloud
+  enabled: false
+# =============================================================================
 
 # Disable Tailscale - using Traefik Ingress instead
 tailscale:
